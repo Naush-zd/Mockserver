@@ -78,84 +78,8 @@ Inject AI-generated bad data into any operation to test how your code handles pr
 3. Click **Inject** — the mock API now serves bad data
 4. Click **Clear** when done — original data is restored
 
-**Via API** (for CI/CD pipelines):
 
-```bash
-# Apply a failure scenario to an operation
-curl -X POST https://wmsports-mock-server.onrender.com/ai/scenario \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service": "StatsAPI",
-    "operation": "getGamecastBySlug",
-    "scenario": "wrong-types",
-    "fields": ["slug", "gameDate", "sport", "status"]
-  }'
 
-# Your tests now get bad data from the mock API
-npm test
-
-# Restore original data when done
-curl -X POST https://wmsports-mock-server.onrender.com/ai/restore \
-  -H "Content-Type: application/json" \
-  -d '{"service": "StatsAPI"}'
-```
-
-**Available failure scenarios**: `wrong-types`, `missing-fields`, `null-values`, `empty-arrays`, `malformed-dates`, `deprecated-fields`, `extra-fields`, `encoding-issues`, `boundary-values`, `partial-response`
-
----
-
-## Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /` | Dashboard UI |
-| `GET /health` | Health check (Microcks status, service counts) |
-| `POST /graphql` | Unified GraphQL (auto-routes to matching schema) |
-| `POST /graphql/:service` | Specific subgraph proxy to Microcks |
-| `ALL /rest/:service/:version/*` | REST proxy to Microcks |
-| `ALL /v3/*` | Census REST API (shortcut) |
-| `ALL /statmilk/*` | StatMilk REST API (shortcut) |
-| `POST /ai/scenario` | Apply AI-generated scenario data to Microcks |
-| `POST /ai/restore` | Restore original examples for a service |
-| `POST /ai/generate` | Preview AI-generated data (no injection) |
-| `GET /ai/scenarios` | List available failure scenarios |
-
-## GraphQL Services
-
-| Service | Endpoint | Operations |
-|---------|----------|------------|
-| AdsAPI | `/graphql/AdsAPI` | Queries + Mutations |
-| CmsAPI | `/graphql/CmsAPI` | Queries |
-| ContentModulesAPI | `/graphql/ContentModulesAPI` | Queries + Mutations |
-| DataServiceAPI | `/graphql/DataServiceAPI` | Queries |
-| EpisodeAPI | `/graphql/EpisodeAPI` | Queries |
-| HydrationStationAPI | `/graphql/HydrationStationAPI` | Queries + Mutations |
-| LivelikeAPI | `/graphql/LivelikeAPI` | Queries |
-| PushNotificationAPI | `/graphql/PushNotificationAPI` | Queries + Mutations |
-| ReferenceStreamAPI | `/graphql/ReferenceStreamAPI` | Queries |
-| SocialProcessorAPI | `/graphql/SocialProcessorAPI` | Queries + Mutations |
-| SportsSearchAPI | `/graphql/SportsSearchAPI` | Queries |
-| StatsAPI | `/graphql/StatsAPI` | Queries |
-| TagAPI | `/graphql/TagAPI` | Queries |
-| UserAPI | `/graphql/UserAPI` | Queries |
-
-## REST APIs
-
-| Service | Base Path |
-|---------|-----------|
-| Census API | `/rest/Census API/1.0/v3/...` or `/v3/...` |
-| Census Push Notifications API | `/rest/Census Push Notifications API/1.0/v3/...` |
-| StatMilk | `/rest/StatMilk/1.0/api/...` or `/statmilk/...` |
-
-## Event/Async APIs
-
-| Service | Protocols |
-|---------|-----------|
-| Push Notifications Async Events | WebSocket |
-| Push Notifications Kafka Events | Kafka |
-| Push Notifications RabbitMQ Messages | RabbitMQ / AMQP |
-
----
 
 ## Architecture
 
@@ -216,6 +140,3 @@ Or use the `render.yaml` blueprint.
 | `GROQ_API_KEY` | — | Groq API key for AI agent |
 | `AI_MODEL` | `llama-3.3-70b-versatile` | LLM model to use |
 
-## Documentation
-
-For detailed design and implementation, refer to the [WM Sports Mock Server Confluence Page](https://wbddigital.atlassian.net/wiki/x/bYD8yQ).
