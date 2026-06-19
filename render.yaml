@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: wmsports-mock-server
+    runtime: node
+    plan: free
+    buildCommand: npm install --production
+    startCommand: node server.cjs
+    envVars:
+      - key: PORT
+        value: 4010
+      - key: NODE_ENV
+        value: production
+      - key: MICROCKS_URL
+        value: https://microcks-uber-latest.onrender.com

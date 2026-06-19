@@ -1,0 +1,68 @@
+services:
+  microcks:
+    image: quay.io/microcks/microcks-uber:latest
+    ports:
+      - "8585:8080"
+    volumes:
+      # Microcks reads artifacts via its own importer; mount the shared volume
+      # read-only so the engine never mutates spec files.
+      - artifacts:/app/artifacts:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/services"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  dashboard:
+    build: .
+    ports:
+      - "4010:4010"
+    environment:
+      - PORT=4010
+      - MICROCKS_URL=http://microcks:8080
+      - ARTIFACTS_DIR=/app/artifacts
+      - STATE_FILE_PATH=/app/artifacts/state.json
+    volumes:
+      # Writable mount for runtime-generated artifacts (AI setup output).
+      # In production this volume is bind-mounted to a persistent EBS path
+      # via the `volumes` section below.
+      - artifacts:/app/artifacts
+    healthcheck:
+      # Once the node process is listening, the entrypoint has already finished
+      # seeding the artifacts volume — the `import` sidecar uses this as its
+      # signal that the volume is ready.
+      test: ["CMD-SHELL", "curl -sf http://localhost:4010/health > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    depends_on:
+      microcks:
+        condition: service_healthy
+
+  import:
+    image: quay.io/microcks/microcks-uber:latest
+    entrypoint: ["bash", "/scripts/import-to-microcks.sh"]
+    volumes:
+      - artifacts:/app/artifacts:ro
+      - ./import-to-microcks.sh:/scripts/import-to-microcks.sh:ro
+    environment:
+      - MICROCKS_URL=http://microcks:8080
+      - ARTIFACTS_DIR=/app/artifacts
+    depends_on:
+      microcks:
+        condition: service_healthy
+      # Wait for the dashboard's entrypoint to finish seeding the shared
+      # artifacts volume before scanning it for files to import.
+      dashboard:
+        condition: service_healthy
+
+volumes:
+  # Named volume holding both the seeded baseline and any artifacts generated
+  # at runtime by the AI flows. In dev, Docker manages it under
+  # /var/lib/docker/volumes/. In production on EC2 it should resolve to a
+  # directory on a persistent EBS volume — see the deployment guide for the
+  # bind-mount override.
+  artifacts:
+    driver: local
