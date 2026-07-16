@@ -1,0 +1,177 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "test",
+    "version": "1.0",
+    "description": "Auto-generated CRUD API for test"
+  },
+  "paths": {
+    "/test": {
+      "get": {
+        "operationId": "getAlltests",
+        "summary": "List all tests",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/test"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-microcks-operation": {
+          "dispatcher": "FALLBACK",
+          "dispatcherRules": "{\"fallback\":\"default\"}"
+        }
+      },
+      "post": {
+        "operationId": "createtest",
+        "summary": "Create a new test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/test"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/test"
+                }
+              }
+            }
+          }
+        },
+        "x-microcks-operation": {
+          "dispatcher": "FALLBACK",
+          "dispatcherRules": "{\"fallback\":\"default\"}"
+        }
+      }
+    },
+    "/test/{id}": {
+      "get": {
+        "operationId": "gettestById",
+        "summary": "Get test by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/test"
+                }
+              }
+            }
+          }
+        },
+        "x-microcks-operation": {
+          "dispatcher": "FALLBACK",
+          "dispatcherRules": "{\"dispatcher\":\"URI_PARTS\",\"dispatcherRules\":\"id\",\"fallback\":\"d345d67b-cd2d-4345-b08a-e407e889e389\"}"
+        }
+      },
+      "put": {
+        "operationId": "updatetest",
+        "summary": "Update test",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/test"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/test"
+                }
+              }
+            }
+          }
+        },
+        "x-microcks-operation": {
+          "dispatcher": "FALLBACK",
+          "dispatcherRules": "{\"dispatcher\":\"URI_PARTS\",\"dispatcherRules\":\"id\",\"fallback\":\"c3f93823-6f51-4b03-ab02-40ad095e1697\"}"
+        }
+      },
+      "delete": {
+        "operationId": "deletetest",
+        "summary": "Delete test",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          }
+        },
+        "x-microcks-operation": {
+          "dispatcher": "FALLBACK",
+          "dispatcherRules": "{\"dispatcher\":\"URI_PARTS\",\"dispatcherRules\":\"id\",\"fallback\":\"val-1\"}"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "test": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "age": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

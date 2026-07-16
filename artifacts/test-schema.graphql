@@ -1,0 +1,15 @@
+# microcksId: test : 1.0
+type Query {
+  resourceName: Resource
+}
+
+type Resource {
+  field1: String
+  field2: Int
+  nestedObject: NestedObject
+}
+
+type NestedObject {
+  nestedField1: String
+  nestedField2: Boolean
+}

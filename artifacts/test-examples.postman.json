@@ -1,0 +1,160 @@
+{
+  "info": {
+    "_postman_id": "ai-setup-rest-test-1776959117009",
+    "name": "test",
+    "description": "version=1.0 - AI-generated REST mock examples for test",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "GET /test",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "/test"
+      },
+      "response": [
+        {
+          "name": "example-1",
+          "originalRequest": {
+            "method": "GET",
+            "url": "/test"
+          },
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "[{\"id\":\"2d8a0369-6df7-4640-a63c-74979692cb0a\",\"name\":\"Edith Terry\",\"age\":19},{\"id\":\"d942a89e-44b0-4033-99de-9a425986843c\",\"name\":\"Sonya White\",\"age\":31}]"
+        }
+      ]
+    },
+    {
+      "name": "POST /test",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "/test"
+      },
+      "response": [
+        {
+          "name": "example-1",
+          "originalRequest": {
+            "method": "POST",
+            "url": "/test"
+          },
+          "code": 201,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"id\":\"91a38161-26c9-4cf9-8d19-8315fae2126a\",\"name\":\"Juana Koepp\",\"age\":71}"
+        }
+      ]
+    },
+    {
+      "name": "GET /test/{id}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "/test/{id}"
+      },
+      "response": [
+        {
+          "name": "d345d67b-cd2d-4345-b08a-e407e889e389",
+          "originalRequest": {
+            "method": "GET",
+            "url": "/test/d345d67b-cd2d-4345-b08a-e407e889e389"
+          },
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"id\":\"d345d67b-cd2d-4345-b08a-e407e889e389\",\"name\":\"Fannie Kris\",\"age\":74}"
+        }
+      ]
+    },
+    {
+      "name": "PUT /test/{id}",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "/test/{id}"
+      },
+      "response": [
+        {
+          "name": "c3f93823-6f51-4b03-ab02-40ad095e1697",
+          "originalRequest": {
+            "method": "PUT",
+            "url": "/test/c3f93823-6f51-4b03-ab02-40ad095e1697"
+          },
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"id\":\"c3f93823-6f51-4b03-ab02-40ad095e1697\",\"name\":\"Irving Satterfield\",\"age\":79}"
+        }
+      ]
+    },
+    {
+      "name": "DELETE /test/{id}",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "/test/{id}"
+      },
+      "response": [
+        {
+          "name": "val-1",
+          "originalRequest": {
+            "method": "DELETE",
+            "url": "/test/val-1"
+          },
+          "code": 204,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "null"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+node_modules/
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# AI contract test generator output
+generated-tests/
+.benchmark-tests/
+benchmark-report.json
+
+# Frontend (Next.js) build output
+web/node_modules/
+web/.next/
+web/out/
+
+# Cursor IDE session exports (local notes only, never commit)
+cursor_*.md
+
+# Design mockup references (kept local, not part of the app)
+stitch_unified_mock_studio/
+stitch_unified_mock_studio.zip

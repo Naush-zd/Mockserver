@@ -1,0 +1,67 @@
+{
+  "info": {
+    "_postman_id": "ai-setup-testql-1776420097158",
+    "name": "testql",
+    "description": "version=1.0 - AI-generated mock examples for testql",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "resourceName",
+      "request": {
+        "method": "POST",
+        "url": "http://resourceName",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"query\":\"query resourceName { resourceName { field1 field2 nestedObject { nestedField1 nestedField2 } } }\",\"variables\":{}}"
+        }
+      },
+      "response": [
+        {
+          "name": "example-1",
+          "originalRequest": {
+            "method": "POST",
+            "url": "http://resourceName",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"query resourceName { resourceName { field1 field2 nestedObject { nestedField1 nestedField2 } } }\",\"variables\":{}}"
+            }
+          },
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"data\":{\"resourceName\":{\"field1\":\"gameResult-2023\",\"field2\":42,\"nestedObject\":{\"nestedField1\":\"win\",\"nestedField2\":true}}}}"
+        },
+        {
+          "name": "example-2",
+          "originalRequest": {
+            "method": "POST",
+            "url": "http://resourceName",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\":\"query resourceName { resourceName { field1 field2 nestedObject { nestedField1 nestedField2 } } }\",\"variables\":{}}"
+            }
+          },
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"data\":{\"resourceName\":{\"field1\":\"matchOutcome-2023\",\"field2\":78,\"nestedObject\":{\"nestedField1\":\"loss\",\"nestedField2\":false}}}}"
+        }
+      ]
+    }
+  ]
+}

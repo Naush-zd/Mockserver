@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design tokens (Synthesized Core / Technical Precision).
+  Values are space-separated RGB triplets so Tailwind's `rgb(var(--x) / <alpha>)`
+  mapping can drive opacity utilities like `bg-primary/10`.
+  Dark is the default (:root); light mode is opt-in via [data-theme="light"].
+*/
+:root {
+  --bg: 9 9 11;
+  --surface: 17 18 21;
+  --surface-2: 23 24 28;
+  --surface-3: 31 33 38;
+  --border: 36 38 43;
+  --border-strong: 51 53 59;
+  --fg: 230 231 234;
+  --muted: 139 143 152;
+  --primary: 37 99 235;
+  --primary-hover: 29 78 216;
+  --primary-fg: 255 255 255;
+  --ring: 59 130 246;
+  --success: 16 185 129;
+  --danger: 248 113 113;
+  --warning: 227 179 65;
+  --ai-from: 168 85 247;
+  --ai-to: 34 211 238;
+  --code-bg: 0 0 0;
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: 250 250 251;
+  --surface: 255 255 255;
+  --surface-2: 243 244 246;
+  --surface-3: 233 236 255;
+  --border: 229 231 235;
+  --border-strong: 209 213 219;
+  --fg: 17 24 39;
+  --muted: 107 114 128;
+  --primary: 37 99 235;
+  --primary-hover: 29 78 216;
+  --primary-fg: 255 255 255;
+  --ring: 37 99 235;
+  --success: 16 185 129;
+  --danger: 220 38 38;
+  --warning: 217 119 6;
+  --ai-from: 147 51 234;
+  --ai-to: 6 182 212;
+  --code-bg: 243 244 246;
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--fg));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Smoothly fade surfaces/text when switching themes. */
+body,
+body * {
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-strong));
+  border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Gradient border used for AI-powered cards (purple → cyan). */
+.ai-border {
+  position: relative;
+  background: rgb(var(--surface));
+}
+.ai-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgb(var(--ai-from)), rgb(var(--ai-to)));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.75);
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}

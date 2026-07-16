@@ -41,6 +41,18 @@ services:
       microcks:
         condition: service_healthy
 
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      # Server-side URL the Next.js proxy uses to reach the Express API.
+      - BACKEND_URL=http://dashboard:4010
+      - NODE_ENV=production
+    depends_on:
+      dashboard:
+        condition: service_healthy
+
   import:
     image: quay.io/microcks/microcks-uber:latest
     entrypoint: ["bash", "/scripts/import-to-microcks.sh"]

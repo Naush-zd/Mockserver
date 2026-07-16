@@ -1,11 +1,14 @@
 {
-  "name": "wmsports-mock-server",
+  "name": "unified-mockserver",
   "version": "2.0.0",
-  "description": "Microcks-powered mock server for WM Sports — GraphQL, REST, Kafka, RabbitMQ with a dashboard UI",
+  "description": "Microcks-powered unified mock server — GraphQL, REST, Kafka, RabbitMQ with a dashboard UI",
   "private": true,
   "scripts": {
     "start": "node server.cjs",
     "dev": "node server.cjs",
+    "gen:tests": "node scripts/generate-tests.cjs --all",
+    "benchmark": "node scripts/benchmark.cjs",
+    "benchmark:chaos": "node scripts/benchmark.cjs --resilience",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:import": "docker compose run --rm import"

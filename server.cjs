@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WM Sports Mock Server — Microcks-Powered
+ * Unified Mockserver — Microcks-Powered
  *
  * A dashboard UI that proxies all mock requests to a Microcks instance.
  * Microcks handles the actual mocking (200+ operations across GraphQL, REST, Kafka, RabbitMQ).
@@ -28,7 +28,7 @@ const { isAuthEnabled, authHeaders } = require('./src/lib/microcks-auth.cjs');
 const { filterToNamespace, isEnabled: nsEnabled } = require('./src/lib/microcks-namespace.cjs');
 
 app.listen(PORT, async () => {
-  console.log(`\n  WM Sports Mock Server (Microcks-Powered)`);
+  console.log(`\n  Unified Mockserver (Microcks-Powered)`);
   console.log(`  ─────────────────────────────────────────`);
   console.log(`  Dashboard:  http://localhost:${PORT}`);
   console.log(`  Microcks:   ${MICROCKS_URL}`);
@@ -44,8 +44,6 @@ app.listen(PORT, async () => {
   console.log(`  GraphQL:    POST /graphql/:service`);
   console.log(`  REST:       /rest/:service/:version/...`);
   console.log(`  Health:     GET /health`);
-  console.log(`  Stat REST:  For sports-stats-api use STAT_REST_API_URL=http://localhost:${PORT}`);
-  console.log(`              (Apollo strips /rest/... from base when paths start with /api; do not point at Microcks :8585 for Stat REST.)`);
   console.log(`  AI Setup:   POST /ai/setup (schema + prompt → auto-deploy)`);
   console.log(`  AI Scenario: POST /ai/scenario (apply failure scenarios to Microcks)`);
   console.log(`  AI:         ${AI_API_KEY ? AI_PROVIDER + ' / ' + AI_MODEL : '⚠ Not set (export GROQ_API_KEY) — using fallback mode'}`);
