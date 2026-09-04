@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/Naush-zd/Mockserver/security/policy
+    about: Please report security issues privately — do not open a public issue.
+  - name: 💬 Questions & discussion
+    url: https://github.com/Naush-zd/Mockserver/discussions
+    about: Ask questions, share ideas, or get help using Unified Mockserver.
+  - name: 📖 Microcks documentation
+    url: https://microcks.io/documentation/
+    about: Docs for the underlying Microcks mocking engine.
