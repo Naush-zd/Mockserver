@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
-import { api, getActiveWorkspace, setActiveWorkspace } from '@/lib/api';
+import { api, getActiveWorkspace, setActiveWorkspace, onCatalogChanged } from '@/lib/api';
 import type { Health, Workspace } from '@/lib/types';
 import {
   IconOverview,
@@ -62,6 +62,12 @@ export function Sidebar() {
     api.health().then(setHealth).catch(() => setHealth(null));
     api.listWorkspaces().then((r) => setWorkspaces(r.workspaces || [])).catch(() => setWorkspaces([]));
   }, []);
+
+  // Deploying/restoring a mock elsewhere in the app (e.g. AI Studio) changes
+  // the service count shown below — refetch so it doesn't go stale.
+  React.useEffect(() => onCatalogChanged(() => {
+    api.health().then(setHealth).catch(() => {});
+  }), []);
 
   React.useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -130,7 +136,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-[rgb(var(--border))] bg-surface">
+    <aside className="flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-[rgb(var(--border))] bg-surface">
       <div className="flex items-center gap-2 border-b border-[rgb(var(--border))] px-5 py-4">
         <div className="grid h-8 w-8 place-items-center rounded-md bg-ai-gradient text-sm font-bold text-white">U</div>
         <div className="leading-tight">

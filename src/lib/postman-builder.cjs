@@ -294,6 +294,21 @@ function buildRestPostmanCollection(serviceName, version, operations, generatedD
     op.path.replace(/\{(\w+)\}/g, (_, name) => { pathParams.push(name); });
 
     if (Array.isArray(data) && data.length > 0) {
+      // List endpoints (response schema is `type: array`, e.g. GET /products)
+      // must serve ALL generated items in one response body — a plain GET
+      // with no dispatcher criteria only ever returns a single named example,
+      // so N separate per-item examples would silently truncate "generate N
+      // products" down to whichever one example happened to be served.
+      const isListResponse = op.responseSchema?.type === 'array' && pathParams.length === 0;
+      if (isListResponse) {
+        responses.push({
+          name: 'default',
+          originalRequest: { method: op.method, url: op.path },
+          code: op.responseCode,
+          header: [{ key: 'Content-Type', value: 'application/json' }],
+          body: JSON.stringify(data.map(stripPathParams)),
+        });
+      } else {
       for (let i = 0; i < data.length; i++) {
         let exampleUrl = op.path;
         const paramValues = [];
@@ -315,6 +330,7 @@ function buildRestPostmanCollection(serviceName, version, operations, generatedD
           header: [{ key: 'Content-Type', value: 'application/json' }],
           body: JSON.stringify(cleanData),
         });
+      }
       }
     } else {
       let exampleUrl = op.path;

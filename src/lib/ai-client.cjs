@@ -6,6 +6,9 @@ let _lastAIError = null;
 let _lastAIErrorTime = 0;
 
 function isAIAvailable() {
+  // The local AI Core Proxy is a trusted dev endpoint and typically doesn't
+  // require an API key — treat it as available as long as it's selected.
+  if (AI_PROVIDER === 'local') return true;
   return !!AI_API_KEY;
 }
 
@@ -16,7 +19,7 @@ function getAIStatus() {
     available,
     provider: AI_PROVIDER,
     model: AI_MODEL,
-    configured: !!AI_API_KEY,
+    configured: available,
     recentFailure: recentFailure ? _lastAIError : null,
   };
 }

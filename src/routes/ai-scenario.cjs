@@ -25,6 +25,7 @@ const { parseGraphQLSchema, parseAsyncAPISpec, parseProtobufSpec, describeAsyncC
 const { queryServiceMap, richTypeMap, serviceRichTypeMap, asyncApiSpecs, protoSpecs } = require('../lib/schema-loader.cjs');
 const {
   getMicrocksServiceId,
+  getMicrocksServiceInfo,
   importArtifactToMicrocks,
   deleteServiceFromMicrocks,
   clearServiceDispatchers,
@@ -34,46 +35,62 @@ const {
 const { buildPostmanCollection, buildSingleOpRestCollection } = require('../lib/postman-builder.cjs');
 const { ARTIFACTS_DIR } = require('../config.cjs');
 
-function findMainArtifact(serviceName) {
-  const norm = serviceName.toLowerCase().replace(/api$/i, '').replace(/[^a-z0-9]/g, '');
+// `protocolHint` (from the live Microcks service's own `type`) disambiguates
+// artifacts that normalize to the same name but describe different kinds of
+// API — e.g. "test-openapi.json" (REST) vs "test-schema.graphql" (GraphQL).
+// Without it we'd always prefer schema files, silently turning a REST
+// service into a GraphQL one on restore.
+function findMainArtifact(serviceName, protocolHint) {
+  // Must match the slug produced by toSafeArtifactSlug() when the artifact was
+  // written — that never strips a trailing "api", so neither should this (a
+  // service literally named "ProductsAPI" is written as "...productsapi-openapi.json").
+  const norm = serviceName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // Pass 1: exact match only
   const schemaFiles = fs.readdirSync(ARTIFACTS_DIR).filter(f => f.endsWith('-schema.graphql'));
-  for (const file of schemaFiles) {
-    const fn = file.toLowerCase().replace(/-schema\.graphql$/, '').replace(/-/g, '');
-    if (fn === norm) return file;
-  }
   const openapiFiles = fs.readdirSync(ARTIFACTS_DIR).filter(f => f.endsWith('-openapi.json') || f.endsWith('-openapi.yaml'));
-  for (const file of openapiFiles) {
-    const fn = file.toLowerCase().replace(/-openapi\.(json|yaml)$/, '').replace(/-/g, '');
-    if (fn === norm) return file;
-  }
   const asyncapiFiles = fs.readdirSync(ARTIFACTS_DIR).filter(f => f.endsWith('-asyncapi.yaml') || f.endsWith('-asyncapi.yml'));
-  for (const file of asyncapiFiles) {
-    const fn = file.toLowerCase().replace(/-asyncapi\.(yaml|yml)$/, '').replace(/-/g, '');
-    if (fn === norm) return file;
-  }
   const protoFiles = fs.readdirSync(ARTIFACTS_DIR).filter(f => f.endsWith('.proto'));
-  for (const file of protoFiles) {
-    const fn = file.toLowerCase().replace(/\.proto$/, '').replace(/-/g, '');
-    if (fn === norm) return file;
+
+  const matchIn = (files, stripRe) => {
+    for (const file of files) {
+      const fn = file.toLowerCase().replace(stripRe, '').replace(/-/g, '');
+      if (fn === norm) return file;
+    }
+    for (const file of files) {
+      const fn = file.toLowerCase().replace(stripRe, '').replace(/-/g, '');
+      if (fn.length === norm.length && (fn.includes(norm) || norm.includes(fn))) return file;
+    }
+    return null;
+  };
+
+  const groups = {
+    REST: [openapiFiles, /-openapi\.(json|yaml)$/],
+    GRAPHQL: [schemaFiles, /-schema\.graphql$/],
+    EVENT: [asyncapiFiles, /-asyncapi\.(yaml|yml)$/],
+    GRPC: [protoFiles, /\.proto$/],
+  };
+
+  // Try the artifact kind matching the service's actual protocol first.
+  const hint = groups[protocolHint];
+  if (hint) {
+    const match = matchIn(hint[0], hint[1]);
+    if (match) return match;
   }
 
-  // Pass 2: substring match (but only if the normalized names are the same length to avoid cross-matching)
-  for (const file of schemaFiles) {
-    const fn = file.toLowerCase().replace(/-schema\.graphql$/, '').replace(/-/g, '');
-    if (fn.length === norm.length && (fn.includes(norm) || norm.includes(fn))) return file;
-  }
-  for (const file of openapiFiles) {
-    const fn = file.toLowerCase().replace(/-openapi\.(json|yaml)$/, '').replace(/-/g, '');
-    if (fn.length === norm.length && (fn.includes(norm) || norm.includes(fn))) return file;
+  // Fall back to scanning every kind (previous behavior) when there's no
+  // hint or the hinted kind has no matching artifact.
+  for (const [files, stripRe] of Object.values(groups)) {
+    const match = matchIn(files, stripRe);
+    if (match) return match;
   }
   return null;
 }
 
 function findExamplesFile(serviceName) {
   const files = fs.readdirSync(ARTIFACTS_DIR).filter(f => f.endsWith('-examples.postman.json'));
-  const norm = serviceName.toLowerCase().replace(/api$/i, '').replace(/[^a-z0-9]/g, '');
+  // Must match the slug produced by toSafeArtifactSlug() when the artifact was
+  // written — that never strips a trailing "api", so neither should this.
+  const norm = serviceName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // Exact match first
   for (const file of files) {
@@ -108,13 +125,19 @@ async function uploadPostmanCollection(collection) {
 }
 
 async function restoreOriginalExamples(serviceName) {
-  const serviceId = await getMicrocksServiceId(serviceName);
+  // Capture the service's real protocol before deleting it, so the artifact
+  // lookup below can't accidentally swap it for a same-named artifact of a
+  // different kind (e.g. REST "test" → GraphQL "test").
+  const info = await getMicrocksServiceInfo(serviceName);
+  const protocolHint = info && info.type;
+
+  const serviceId = info ? info.id : await getMicrocksServiceId(serviceName);
   if (serviceId) {
     await deleteServiceFromMicrocks(serviceId);
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  const mainFile = findMainArtifact(serviceName);
+  const mainFile = findMainArtifact(serviceName, protocolHint);
   if (!mainFile) return { restored: false, reason: 'No main artifact found for ' + serviceName };
   await importArtifactToMicrocks(path.join(ARTIFACTS_DIR, mainFile), true);
   await new Promise(r => setTimeout(r, 2000));
@@ -257,6 +280,15 @@ function extractReturnType(typeNode) {
   return null;
 }
 
+function isListReturnType(typeNode) {
+  if (!typeNode) return false;
+  if (typeNode.kind === 'ListType') return true;
+  if (typeNode.kind === 'NonNullType') return isListReturnType(typeNode.type);
+  return false;
+}
+
+// Resolves both the (unwrapped) named return type and whether the operation
+// returns a list, so list-returning operations keep an array shape.
 function getOperationReturnType(opName) {
   const files = fs.readdirSync(ARTIFACTS_DIR).filter(f => f.endsWith('.graphql'));
   for (const file of files) {
@@ -267,13 +299,16 @@ function getOperationReturnType(opName) {
         if ((def.kind === Kind.OBJECT_TYPE_DEFINITION || def.kind === Kind.OBJECT_TYPE_EXTENSION) &&
             (def.name.value === 'Query' || def.name.value === 'Mutation')) {
           for (const field of (def.fields || [])) {
-            if (field.name.value === opName) return extractReturnType(field.type);
+            if (field.name.value === opName) {
+              const named = extractReturnType(field.type);
+              return { type: named, isList: isListReturnType(field.type) };
+            }
           }
         }
       }
     } catch (_) {}
   }
-  return null;
+  return { type: null, isList: false };
 }
 
 function buildTypeSchema(typeName, depth = 0, visited = new Set(), svcName = null) {
@@ -298,16 +333,17 @@ function buildTypeSchema(typeName, depth = 0, visited = new Set(), svcName = nul
   return result;
 }
 
-function applyScenarioTransform(data, scenario) {
-  if (!data || typeof data !== 'object') return data;
-  const obj = Array.isArray(data) ? data[0] : data;
-  if (!obj || typeof obj !== 'object') return data;
+// Apply a scenario transform to a SINGLE object. Arrays are handled by
+// applyScenarioTransform, which maps this over every element \u2014 so a list
+// response keeps its cardinality and every item gets the same edit.
+function transformObject(obj, scenario) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
 
   switch (scenario) {
     case 'null-values': {
       const result = {};
       for (const k of Object.keys(obj)) result[k] = null;
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'empty-arrays': {
       const result = {};
@@ -317,14 +353,14 @@ function applyScenarioTransform(data, scenario) {
         else if (typeof v === 'number') result[k] = 0;
         else result[k] = v;
       }
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'missing-fields': {
       const keys = Object.keys(obj);
       const toRemove = keys.slice(0, Math.max(2, Math.floor(keys.length * 0.3)));
       const result = { ...obj };
       toRemove.forEach(k => delete result[k]);
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'wrong-types': {
       const result = {};
@@ -335,7 +371,7 @@ function applyScenarioTransform(data, scenario) {
         else if (Array.isArray(v)) result[k] = 'should-be-array';
         else result[k] = v;
       }
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'boundary-values': {
       const result = {};
@@ -344,7 +380,7 @@ function applyScenarioTransform(data, scenario) {
         else if (typeof v === 'number') result[k] = 2147483647;
         else result[k] = v;
       }
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'encoding-issues': {
       const result = {};
@@ -352,7 +388,7 @@ function applyScenarioTransform(data, scenario) {
         if (typeof v === 'string') result[k] = `<script>alert("${k}")</script> \u00e9\u00e8\u00ea \u2764\ufe0f &amp;`;
         else result[k] = v;
       }
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'malformed-dates': {
       const result = {};
@@ -366,31 +402,38 @@ function applyScenarioTransform(data, scenario) {
           result[k] = v;
         }
       }
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'extra-fields': {
-      const result = { ...obj, __internal_id: 'debug-9999', _debug_trace: 'fallback', legacyScore: -1, _deprecated_v1: true };
-      return Array.isArray(data) ? [result] : result;
+      return { ...obj, __internal_id: 'debug-9999', _debug_trace: 'fallback', legacyScore: -1, _deprecated_v1: true };
     }
     case 'partial-response': {
       const keys = Object.keys(obj);
       const keep = keys.slice(0, Math.min(2, keys.length));
       const result = {};
       keep.forEach(k => { result[k] = obj[k]; });
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     case 'mixed-good-bad': {
       const keys = Object.keys(obj);
       const result = { ...obj };
       keys.slice(0, Math.floor(keys.length / 2)).forEach(k => { result[k] = null; });
-      return Array.isArray(data) ? [result] : result;
+      return result;
     }
     default:
-      return data;
+      return obj;
   }
 }
 
-function generateFallbackForGraphQL(operation, retType, svcName, scenario, fieldList) {
+function applyScenarioTransform(data, scenario) {
+  if (!data || typeof data !== 'object') return data;
+  // A list response keeps every element: apply the object-level edit to each
+  // item rather than collapsing the array to a single transformed object.
+  if (Array.isArray(data)) return data.map(item => transformObject(item, scenario));
+  return transformObject(data, scenario);
+}
+
+function generateFallbackForGraphQL(operation, retType, svcName, scenario, fieldList, isList) {
   const typeMap = (svcName && serviceRichTypeMap[svcName]) || richTypeMap;
 
   let mockData = null;
@@ -406,6 +449,10 @@ function generateFallbackForGraphQL(operation, retType, svcName, scenario, field
   } else {
     mockData = { id: 'fallback-001', name: 'Fallback Mock', status: 'active' };
   }
+
+  // Preserve a list-returning operation's array shape so the object-level
+  // scenario edit applies to elements rather than collapsing to one object.
+  if (isList) mockData = [mockData];
 
   if (scenario && scenario !== 'success') {
     mockData = applyScenarioTransform(mockData, scenario);
@@ -447,17 +494,27 @@ router.post('/ai/scenario', async (req, res) => {
     const details = await getRestOperationDetails(service, operation);
     const exampleBody = details ? details.body : null;
     const structureDesc = exampleBody ? describeJsonStructure(exampleBody) : '{}';
-    const restFields = fieldList || (exampleBody ? Object.keys(exampleBody) : []);
+    // Field names come from a single object — from the first item when the
+    // response is an array, never the array's numeric indices.
+    const sampleObj = Array.isArray(exampleBody) ? exampleBody[0] : exampleBody;
+    const restFields = fieldList || (sampleObj && typeof sampleObj === 'object' ? Object.keys(sampleObj) : []);
     const fNames = restFields.join(', ') || 'all fields';
     const scenarioPrompt = buildScenarioPrompt(scenario, restFields, fNames, 'response');
+
+    // If the original response is a list, the scenario is an object-level edit
+    // that must be applied to EVERY element — the AI must keep it an array of
+    // the same length, not collapse it to a single object.
+    const arrayHint = Array.isArray(exampleBody)
+      ? `\n\nCRITICAL: The response is a JSON ARRAY of ${exampleBody.length} object(s). Return an array with the SAME number of elements, applying the change to EVERY element. Do NOT collapse the array into a single object.`
+      : '';
 
     const isCustomRestPrompt = !!prompt && !scenario;
     const userPrompt = prompt || scenarioPrompt || '';
     let opMsg;
     if (isCustomRestPrompt) {
-      opMsg = `USER INSTRUCTION (follow this EXACTLY): ${userPrompt}\n\nThe response has these fields: ${fNames}.\nFollow the user instruction above precisely. If they say to remove/delete fields, those fields must be COMPLETELY ABSENT from the JSON (not null, not empty — the key itself must not exist). If they say to set fields to null, set them to null. Do exactly what is asked.\n\nOriginal response structure:\n${structureDesc}\n\nExample body:\n${JSON.stringify(exampleBody, null, 2).slice(0, 1500)}\n\nReturn ONLY valid JSON matching this REST response structure. Do NOT wrap in {"data": ...}.`;
+      opMsg = `USER INSTRUCTION (follow this EXACTLY): ${userPrompt}\n\nThe response has these fields: ${fNames}.\nFollow the user instruction above precisely. If they say to remove/delete fields, those fields must be COMPLETELY ABSENT from the JSON (not null, not empty — the key itself must not exist). If they say to set fields to null, set them to null. Do exactly what is asked.${arrayHint}\n\nOriginal response structure:\n${structureDesc}\n\nExample body:\n${JSON.stringify(exampleBody, null, 2).slice(0, 1500)}\n\nReturn ONLY valid JSON matching this REST response structure. Do NOT wrap in {"data": ...}.`;
     } else {
-      opMsg = userPrompt + `\n\nOriginal response structure:\n${structureDesc}\n\nExample body:\n${JSON.stringify(exampleBody, null, 2).slice(0, 1500)}\n\nReturn ONLY valid JSON matching this REST response structure. Do NOT wrap in {"data": ...}.`;
+      opMsg = userPrompt + `${arrayHint}\n\nOriginal response structure:\n${structureDesc}\n\nExample body:\n${JSON.stringify(exampleBody, null, 2).slice(0, 1500)}\n\nReturn ONLY valid JSON matching this REST response structure. Do NOT wrap in {"data": ...}.`;
     }
 
     let aiData;
@@ -476,8 +533,13 @@ router.post('/ai/scenario', async (req, res) => {
 
     if (!fallback && isCustomRestPrompt) {
       const toRemove = extractFieldsToRemove(userPrompt, restFields);
-      if (toRemove.length > 0 && typeof aiData === 'object') {
-        toRemove.forEach(field => delete aiData[field]);
+      if (toRemove.length > 0 && aiData && typeof aiData === 'object') {
+        // Drop the fields from every element of a list response, or from the
+        // single object otherwise.
+        const targets = Array.isArray(aiData) ? aiData : [aiData];
+        targets.forEach(item => {
+          if (item && typeof item === 'object') toRemove.forEach(field => delete item[field]);
+        });
       }
     }
 
@@ -621,11 +683,17 @@ router.post('/ai/scenario', async (req, res) => {
   }
 
   // GraphQL scenario
-  const retType = getOperationReturnType(operation);
+  const { type: retType, isList: retIsList } = getOperationReturnType(operation);
   const svcForSchema = queryServiceMap[operation] || service || null;
   const schemaCtx = retType ? buildTypeSchema(retType, 0, new Set(), svcForSchema) : '';
   const fNames = fieldList ? fieldList.join(', ') : 'all fields';
   const scenarioPrompt = buildScenarioPrompt(scenario, fieldList, fNames, 'query');
+  // A list-returning operation must stay an array so the object-level scenario
+  // applies to every element instead of collapsing to a single object.
+  const shape = retIsList ? '[{...}]' : '{...}';
+  const listHint = retIsList
+    ? `\nCRITICAL: "${operation}" returns a LIST. Return a JSON ARRAY of objects for it, applying the change to EVERY element. Do NOT collapse it to a single object.`
+    : '';
 
   const isCustomPrompt = !!(prompt && String(prompt).trim());
   const userPrompt = prompt || scenarioPrompt || '';
@@ -645,21 +713,21 @@ router.post('/ai/scenario', async (req, res) => {
 
   let opMsg;
   if (isCustomPrompt) {
-    opMsg = `USER INSTRUCTION (follow this EXACTLY): ${userPrompt}\n\nThe query has these fields: ${fNames}.\nCRITICAL: Follow the user instruction above precisely. When they say "remove", "delete", or "omit" specific fields, set those fields to null — do NOT use empty objects {} or omit the keys (GraphQL requires all requested fields present). All other fields: return realistic values.${explicitNullFields}${diversityHint}\n\nSchema for reference:\n${schemaCtx}\nReturn ONLY valid JSON as: {"data": {"${operation}": {...}}}`;
+    opMsg = `USER INSTRUCTION (follow this EXACTLY): ${userPrompt}\n\nThe query has these fields: ${fNames}.\nCRITICAL: Follow the user instruction above precisely. When they say "remove", "delete", or "omit" specific fields, set those fields to null — do NOT use empty objects {} or omit the keys (GraphQL requires all requested fields present). All other fields: return realistic values.${explicitNullFields}${listHint}${diversityHint}\n\nSchema for reference:\n${schemaCtx}\nReturn ONLY valid JSON as: {"data": {"${operation}": ${shape}}}`;
   } else {
-    opMsg = userPrompt + `\n\nSchema (use EXACT field names and types below):\n${schemaCtx}${fieldsConstraint}\nCRITICAL: Every nested object must use the EXACT sub-field names from the schema above. Do NOT invent field names.${diversityHint}\nReturn ONLY valid JSON as: {"data": {"${operation}": {...}}}`;
+    opMsg = userPrompt + `\n\nSchema (use EXACT field names and types below):\n${schemaCtx}${fieldsConstraint}\nCRITICAL: Every nested object must use the EXACT sub-field names from the schema above. Do NOT invent field names.${listHint}${diversityHint}\nReturn ONLY valid JSON as: {"data": {"${operation}": ${shape}}}`;
   }
 
   let aiData;
   let fallback = false;
   if (!isAIAvailable()) {
-    aiData = generateFallbackForGraphQL(operation, retType, svcForSchema, scenario, fieldList);
+    aiData = generateFallbackForGraphQL(operation, retType, svcForSchema, scenario, fieldList, retIsList);
     fallback = true;
   } else {
     try {
       aiData = await callLLM(AI_SYSTEM_PROMPT, opMsg);
     } catch (err) {
-      aiData = generateFallbackForGraphQL(operation, retType, svcForSchema, scenario, fieldList);
+      aiData = generateFallbackForGraphQL(operation, retType, svcForSchema, scenario, fieldList, retIsList);
       fallback = true;
     }
   }
@@ -667,7 +735,12 @@ router.post('/ai/scenario', async (req, res) => {
   if (!fallback && isCustomPrompt && fieldList) {
     const toRemove = extractFieldsToRemove(userPrompt, fieldList);
     if (toRemove.length > 0 && aiData?.data?.[operation]) {
-      toRemove.forEach(field => delete aiData.data[operation][field]);
+      // Remove from every element of a list result, or the single object.
+      const node = aiData.data[operation];
+      const targets = Array.isArray(node) ? node : [node];
+      targets.forEach(item => {
+        if (item && typeof item === 'object') toRemove.forEach(field => delete item[field]);
+      });
       const userScope = getUserScope(req);
       aiRemovedFields[`${userScope}:${service}:${operation}`] = toRemove;
     }

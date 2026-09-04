@@ -4,7 +4,7 @@ import * as React from 'react';
 import { api } from '@/lib/api';
 import type { ServiceDetail, Operation, ScenarioInfo, EdgeCaseScenario, ChaosFault } from '@/lib/types';
 import { Card, Button, Spinner, Badge, StatusDot, Field, Select, Input } from '@/components/ui';
-import { IconSearch, IconStar } from '@/components/icons';
+import { IconSearch, IconStar, IconTrash } from '@/components/icons';
 import { useExplorerStore, pinKey } from '@/lib/explorer-store';
 import type { HistoryEntry } from '@/lib/explorer-store';
 
@@ -76,6 +76,10 @@ export default function ExplorerPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [panel, setPanel] = React.useState<'apis' | 'history' | 'saved'>('apis');
+  const [deletingService, setDeletingService] = React.useState<string | null>(null);
+  // Collapsed service groups in the sidebar (Postman-style collections).
+  // Collapsing is opt-in per group; everything starts expanded.
+  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
 
   // Edge cases + scenario injection + transport faults (formerly the Chaos Lab)
   const [showLab, setShowLab] = React.useState(false);
@@ -330,6 +334,29 @@ export default function ExplorerPage() {
     }
   };
 
+  const deleteService = async (s: ServiceDetail) => {
+    const label = s.displayName || s.name;
+    if (!window.confirm(`Delete "${label}"? This permanently removes it from Microcks.`)) return;
+    setDeletingService(s.name);
+    setError(null);
+    try {
+      const r = await api.deleteService(s.name);
+      if (!r.deleted) {
+        setError(r.error || r.reason || `Could not delete "${label}".`);
+        return;
+      }
+      setServices((prev) => prev.filter((x) => x.name !== s.name));
+      if (selected?.name === s.name) {
+        setSelected(null);
+        setResponse(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeletingService(null);
+    }
+  };
+
   if (loading) return <Spinner label="Loading services…" />;
 
   const q = filter.trim().toLowerCase();
@@ -444,14 +471,42 @@ export default function ExplorerPage() {
               ) : null}
 
               <div className="flex flex-col gap-3">
-                {filtered.map((s) => (
+                {filtered.map((s) => {
+                  const isCollapsed = collapsed[s.name];
+                  return (
                   <div key={s.name}>
-                    <div className="mb-1 flex items-center justify-between px-1">
-                      <span className="truncate text-xs font-semibold uppercase tracking-wide text-muted">
-                        {s.displayName || s.name}
-                      </span>
-                      <Badge tone={isGraphql(s.type) ? 'blue' : s.type === 'REST' ? 'green' : 'yellow'}>{s.type}</Badge>
+                    <div className="mb-1 flex items-center justify-between gap-2 px-1">
+                      <button
+                        onClick={() => setCollapsed((prev) => ({ ...prev, [s.name]: !prev[s.name] }))}
+                        aria-expanded={!isCollapsed}
+                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                      >
+                        <span className={`shrink-0 text-muted transition-transform ${isCollapsed ? '-rotate-90' : ''}`}>
+                          ▾
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-semibold uppercase tracking-wide text-muted">
+                            {s.displayName || s.name}
+                          </div>
+                          {s.displayName && s.displayName !== s.name ? (
+                            <div className="truncate font-mono text-[10px] text-muted/70">{s.name}</div>
+                          ) : null}
+                        </div>
+                      </button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Badge tone={isGraphql(s.type) ? 'blue' : s.type === 'REST' ? 'green' : 'yellow'}>{s.type}</Badge>
+                        <button
+                          onClick={() => deleteService(s)}
+                          disabled={deletingService === s.name}
+                          aria-label={`Delete ${s.displayName || s.name}`}
+                          title="Delete this mock service"
+                          className="text-muted transition hover:text-danger disabled:opacity-50"
+                        >
+                          {deletingService === s.name ? <Spinner /> : <IconTrash width={14} height={14} />}
+                        </button>
+                      </div>
                     </div>
+                    {isCollapsed ? null : (
                     <div className="flex flex-col">
                       {s.operations.map((o) => {
                         const active = selected?.name === s.name && opName === o.name;
@@ -491,8 +546,10 @@ export default function ExplorerPage() {
                         );
                       })}
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 ? <p className="px-1 text-sm text-muted">No matches.</p> : null}
               </div>
             </>
@@ -570,7 +627,7 @@ export default function ExplorerPage() {
             </p>
           </Card>
         ) : selected ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-4">
             <Card className="p-0">
               <div className="flex items-center justify-between gap-3 border-b border-[rgb(var(--border))] px-4 py-2.5">
                 <div className="flex min-w-0 items-center gap-2">

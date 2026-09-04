@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { api, getActiveWorkspace } from '@/lib/api';
+import { api, getActiveWorkspace, onCatalogChanged } from '@/lib/api';
 import type { Health, HealthAi, ServiceDetail, Workspace, ActivityEvent } from '@/lib/types';
 import { Card, Badge, Spinner, SectionTitle, StatusDot } from '@/components/ui';
 import { IconAI, IconExplorer, IconPlus } from '@/components/icons';
@@ -41,7 +41,7 @@ export default function OverviewPage() {
 
   React.useEffect(() => {
     let alive = true;
-    (async () => {
+    const load = async () => {
       try {
         const [h, a, d] = await Promise.all([api.health(), api.healthAi(), api.servicesDetail()]);
         if (!alive) return;
@@ -66,9 +66,14 @@ export default function OverviewPage() {
       } finally {
         if (alive) setLoading(false);
       }
-    })();
+    };
+    load();
+    // Deploying/restoring a mock elsewhere (e.g. AI Studio) changes these
+    // counts — refetch so the tiles below don't go stale.
+    const unsubscribe = onCatalogChanged(load);
     return () => {
       alive = false;
+      unsubscribe();
     };
   }, []);
 
@@ -254,7 +259,6 @@ export default function OverviewPage() {
                 status={aiLLM ? 'Active' : 'Fallback'}
               />
               <HealthRow name="Mock API" detail="Express proxy responding" tone="green" status="Active" pulse />
-              <HealthRow name="Namespace" detail="unified-* prefix enforced" tone="green" status="Guarded" />
             </Card>
           </div>
 

@@ -44,6 +44,23 @@ function wsHeaders(base?: HeadersInit): HeadersInit {
   return h;
 }
 
+// ── Catalog change notifications ────────────────────────────────────────────
+// Deploying or restoring a mock changes the service/operation counts shown in
+// the Sidebar and Overview page, but those components fetch health once on
+// mount and have no other way to learn the catalog changed. Emit a DOM event
+// so any mounted component can opportunistically refetch.
+const CATALOG_CHANGED_EVENT = 'mockserver:catalog-changed';
+
+function notifyCatalogChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CATALOG_CHANGED_EVENT));
+}
+
+export function onCatalogChanged(listener: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(CATALOG_CHANGED_EVENT, listener);
+  return () => window.removeEventListener(CATALOG_CHANGED_EVENT, listener);
+}
+
 function bfetch(path: string, init: RequestInit = {}) {
   return fetch(`${B}${path}`, { ...init, headers: wsHeaders(init.headers) });
 }
@@ -123,9 +140,12 @@ export const api = {
     ),
 
   aiSetup: (body: { schema: string; prompt: string; serviceName?: string }) =>
-    bfetch('/ai/setup', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then((r) =>
-      asJson<SetupResult>(r)
-    ),
+    bfetch('/ai/setup', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) })
+      .then((r) => asJson<SetupResult>(r))
+      .then((r) => {
+        notifyCatalogChanged();
+        return r;
+      }),
 
   suggestScenarios: (body: { service: string; operation: string; apiType: string; prompt?: string }) =>
     bfetch('/ai/suggest-scenarios', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }).then((r) =>
@@ -200,9 +220,20 @@ export const api = {
     ),
 
   restore: (service: string) =>
-    bfetch('/ai/restore', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ service }) }).then((r) =>
-      asJson<Record<string, unknown>>(r)
-    ),
+    bfetch('/ai/restore', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ service }) })
+      .then((r) => asJson<Record<string, unknown>>(r))
+      .then((r) => {
+        notifyCatalogChanged();
+        return r;
+      }),
+
+  deleteService: (service: string) =>
+    bfetch(`/api/services/${encodeURIComponent(service)}`, { method: 'DELETE' })
+      .then((r) => asJson<{ deleted: boolean; error?: string; namespaceViolation?: boolean; reason?: string }>(r))
+      .then((r) => {
+        notifyCatalogChanged();
+        return r;
+      }),
 
   queryFields: (operation: string, service: string) =>
     bfetch(`/schema/query-fields?operation=${encodeURIComponent(operation)}&service=${encodeURIComponent(service)}`)

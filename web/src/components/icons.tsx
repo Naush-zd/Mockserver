@@ -128,6 +128,15 @@ export const IconStar = (p: P) => (
   </svg>
 );
 
+export const IconTrash = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16" />
+    <path d="M10 11v6M14 11v6" />
+    <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+    <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+  </svg>
+);
+
 export const IconExternal = (p: P) => (
   <svg {...base(p)}>
     <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />

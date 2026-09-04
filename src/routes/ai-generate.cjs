@@ -204,7 +204,7 @@ function loadRestSchemaContext(serviceName, operationName) {
 }
 
 router.post('/ai/suggest-scenarios', async (req, res) => {
-  const { service, operation, apiType } = req.body;
+  const { service, operation, apiType, prompt: userFocus } = req.body;
   if (!operation) return res.status(400).json({ error: 'Provide "operation"' });
 
   const isRest = apiType === 'rest';
@@ -229,6 +229,7 @@ Operation: ${operation}
 Type: ${isRest ? 'REST' : 'GraphQL'}
 ${argsInfo.length > 0 ? `Arguments: ${argsInfo.map(a => `${a.name}: ${a.isList ? '[' + a.type + ']' : a.type}`).join(', ')}` : ''}
 ${schemaCtx ? `Schema:\n${schemaCtx}` : ''}
+${userFocus ? `\nUSER FOCUS (required — every scenario must relate to this): ${userFocus}` : ''}
 
 Return JSON with this structure:
 {

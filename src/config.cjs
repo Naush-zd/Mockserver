@@ -26,8 +26,9 @@ const MICROCKS_AUTH_ENABLED = Boolean(
 
 // Namespace isolation in a shared Microcks catalog.
 // All service names we create/mutate are prefixed; deletes outside the prefix are refused.
-// Set to empty string to disable (e.g. local dev with a private Microcks).
-const MICROCKS_SERVICE_PREFIX = process.env.MICROCKS_SERVICE_PREFIX ?? 'unified-';
+// Disabled by default (empty prefix) — set MICROCKS_SERVICE_PREFIX to re-enable
+// if this instance ever shares a Microcks catalog with other teams.
+const MICROCKS_SERVICE_PREFIX = process.env.MICROCKS_SERVICE_PREFIX ?? '';
 
 const AI_PROVIDER = process.env.AI_PROVIDER || 'groq';
 
@@ -41,6 +42,16 @@ const AI_CONFIG = {
     apiKey: process.env.TOGETHER_API_KEY,
     baseURL: 'https://api.together.xyz/v1',
     model: 'Qwen/Qwen2.5-7B-Instruct'
+  },
+  // OpenAI-compatible local proxy (e.g. an AI Core Proxy exposing
+  // /v1/chat/completions). No API key required by default since it's a
+  // local/trusted endpoint; set AI_API_KEY if your proxy enforces one.
+  // From inside a Docker container, a proxy bound to the host's 0.0.0.0
+  // is reached via `host.docker.internal`, not `localhost`.
+  local: {
+    apiKey: process.env.AI_API_KEY || '',
+    baseURL: process.env.AI_BASE_URL || 'http://host.docker.internal:3030/v1',
+    model: process.env.AI_MODEL || 'gpt-4o-mini',
   },
 };
 

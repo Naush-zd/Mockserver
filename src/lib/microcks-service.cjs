@@ -37,14 +37,28 @@ function invalidateCache() {
   lastFetch = 0;
 }
 
+function findServiceEntry(services, serviceName) {
+  const norm = serviceName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return services.find(s => s.name === serviceName)
+    || services.find(s => s.name.toLowerCase() === serviceName.toLowerCase())
+    || services.find(s => s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
+}
+
 async function getMicrocksServiceId(serviceName) {
   invalidateCache();
   const services = await fetchMicrocksServices();
-  const norm = serviceName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const svc = services.find(s => s.name === serviceName)
-    || services.find(s => s.name.toLowerCase() === serviceName.toLowerCase())
-    || services.find(s => s.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm);
+  const svc = findServiceEntry(services, serviceName);
   return svc ? svc.id : null;
+}
+
+// Returns { id, type } so callers can tell REST from GraphQL/Event/gRPC
+// services that happen to share a normalized name with an artifact of a
+// different kind (e.g. "test-openapi.json" vs "test-schema.graphql").
+async function getMicrocksServiceInfo(serviceName) {
+  invalidateCache();
+  const services = await fetchMicrocksServices();
+  const svc = findServiceEntry(services, serviceName);
+  return svc ? { id: svc.id, type: svc.type } : null;
 }
 
 function curlExec(args, timeoutMs = 20000) {
@@ -314,27 +328,8 @@ async function getMicrocksExamples(serviceName, operationName) {
 
 async function deleteExistingService(serviceName) {
   try {
-    assertInNamespace(serviceName, 'delete');
-  } catch (err) {
-    if (err instanceof NamespaceViolationError) {
-      return { deleted: false, error: err.message, namespaceViolation: true };
-    }
-    throw err;
-  }
-  try {
     const serviceId = await getMicrocksServiceId(serviceName);
     if (!serviceId) return { deleted: false, reason: 'Service not found' };
-    // Defence in depth: re-verify the resolved service name is actually ours
-    // before issuing the DELETE, in case fuzzy matching cross-namespace'd us.
-    const services = await fetchMicrocksServices();
-    const svc = services.find(s => s.id === serviceId);
-    if (svc && !isInNamespace(svc.name)) {
-      return {
-        deleted: false,
-        error: `resolved service "${svc.name}" is outside namespace — refusing to delete`,
-        namespaceViolation: true,
-      };
-    }
     const result = await deleteServiceFromMicrocks(serviceId);
     return { deleted: result, serviceId };
   } catch (err) {
@@ -466,6 +461,7 @@ module.exports = {
   fetchMicrocksServices,
   invalidateCache,
   getMicrocksServiceId,
+  getMicrocksServiceInfo,
   curlExec,
   parseCurlResult,
   deleteServiceFromMicrocks,

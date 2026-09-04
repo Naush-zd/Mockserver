@@ -532,7 +532,15 @@ const FAILURE_SCENARIOS = {
 function parseSamplesFromPrompt(prompt) {
   if (!prompt) return { total: 1, scenarioInstructions: '' };
 
-  const numMatch = prompt.match(/(\d+)\s*(?:different|sample|example|mock|value|scenario|response)/i);
+  // Try, in order: "generate N ..." (most common phrasing), then a number
+  // immediately followed by a plausible noun, then any number in the prompt
+  // at all. The old version only matched a fixed word list (sample/example/
+  // mock/...) right after the digit, so "Generate 5 realistic products…"
+  // silently fell back to 1 because "realistic" wasn't in that list.
+  const numMatch =
+    prompt.match(/generate\s+(\d+)/i) ||
+    prompt.match(/(\d+)\s*(?:different|sample|example|mock|value|scenario|response|record|item|entry|entries|row|object|product|user|post|order|customer|account)/i) ||
+    prompt.match(/(\d+)/);
   const total = numMatch ? Math.max(1, parseInt(numMatch[1])) : 1;
 
   const scenarioNames = Object.keys(FAILURE_SCENARIOS);

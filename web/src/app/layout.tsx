@@ -31,12 +31,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
       </head>
-      <body className="min-h-screen bg-bg font-sans text-fg antialiased">
-        <div className="flex min-h-screen">
+      <body className="h-screen overflow-hidden bg-bg font-sans text-fg antialiased">
+        <div className="flex h-screen">
           <Sidebar />
-          <div className="flex min-h-screen flex-1 flex-col">
+          <div className="flex h-screen flex-1 flex-col overflow-hidden">
             <Topbar />
-            <main className="flex-1 overflow-auto">
+            <main className="flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">{children}</div>
             </main>
           </div>

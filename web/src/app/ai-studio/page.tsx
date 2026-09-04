@@ -76,14 +76,31 @@ type Query {
   },
 ];
 
-function StepIndicator({ active }: { active: number }) {
+// `page` is which step is currently shown (wizard navigation); `done` marks
+// which steps have real progress behind them (so you can jump back to a
+// completed step, but not skip ahead to one you haven't reached).
+function StepIndicator({
+  page,
+  done,
+  onSelect,
+}: {
+  page: number;
+  done: boolean[];
+  onSelect: (i: number) => void;
+}) {
   return (
     <div className="flex items-center gap-2">
       {STEPS.map((label, i) => {
-        const state = i < active ? 'done' : i === active ? 'current' : 'todo';
+        const state = done[i] ? 'done' : i === page ? 'current' : 'todo';
+        const reachable = done[i] || i === page || (i > 0 && done[i - 1]);
         return (
           <React.Fragment key={label}>
-            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => reachable && onSelect(i)}
+              disabled={!reachable}
+              className={`flex items-center gap-2 rounded-full ${reachable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+            >
               <span
                 className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold transition ${
                   state === 'done'
@@ -102,9 +119,9 @@ function StepIndicator({ active }: { active: number }) {
               >
                 {label}
               </span>
-            </div>
+            </button>
             {i < STEPS.length - 1 ? (
-              <span className={`h-px w-8 ${i < active ? 'bg-success' : 'bg-[rgb(var(--border))]'}`} />
+              <span className={`h-px w-8 ${done[i] ? 'bg-success' : 'bg-[rgb(var(--border))]'}`} />
             ) : null}
           </React.Fragment>
         );
@@ -157,8 +174,13 @@ export default function AIStudioPage() {
   const [suggestErr, setSuggestErr] = React.useState<string | null>(null);
   const [injectingId, setInjectingId] = React.useState<string | null>(null);
   const [injected, setInjected] = React.useState<Record<string, 'ok' | 'fail'>>({});
+  const [restoring, setRestoring] = React.useState(false);
 
-  const active = result ? 4 : deploying ? 3 : detect ? 2 : prompt.trim() ? 1 : 0;
+  // Wizard navigation: one step visible at a time instead of one long
+  // scrolling page. `done` tracks which steps have real progress so users can
+  // jump back to a completed step without losing it.
+  const [page, setPage] = React.useState(0);
+  const done = [schema.trim().length > 0, prompt.trim().length > 0, !!detect, !!result];
 
   const applyTemplate = (t: (typeof TEMPLATES)[number]) => {
     setSchema(t.schema);
@@ -166,6 +188,7 @@ export default function AIStudioPage() {
     setDetect(null);
     setResult(null);
     setError(null);
+    setPage(0);
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,6 +232,7 @@ export default function AIStudioPage() {
       setSuggestions(null);
       setInjected({});
       setSuggestErr(null);
+      setPage(3);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Deployment failed');
     } finally {
@@ -227,6 +251,7 @@ export default function AIStudioPage() {
     setSuggestions(null);
     setInjected({});
     setSuggestErr(null);
+    setPage(0);
   };
 
   const endpoint =
@@ -273,6 +298,17 @@ export default function AIStudioPage() {
     }
   };
 
+  const restoreOriginal = async () => {
+    if (!result) return;
+    setRestoring(true);
+    try {
+      await api.restore(result.serviceName);
+      setInjected({});
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const SEVERITY_TONE: Record<string, 'red' | 'yellow' | 'blue' | 'default'> = {
     critical: 'red',
     high: 'red',
@@ -287,107 +323,121 @@ export default function AIStudioPage() {
           <h1 className="text-2xl font-bold text-fg">AI Studio</h1>
           <Badge tone="purple">AI</Badge>
         </div>
-        <StepIndicator active={active} />
+        <StepIndicator page={page} done={done} onSelect={setPage} />
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-        {/* Left: inputs */}
-        <div className="flex flex-col gap-6">
-          <Card>
-            <SectionTitle hint="Paste a GraphQL SDL, OpenAPI/JSON, AsyncAPI, or Protobuf spec — or upload a file.">
-              1. Schema
-            </SectionTitle>
-            <div className="flex flex-col gap-3">
-              <textarea
-                value={schema}
-                onChange={(e) => {
-                  setSchema(e.target.value);
-                  setDetect(null);
-                  setResult(null);
-                }}
-                spellCheck={false}
-                placeholder="type Query { ... }"
-                className="h-64 w-full resize-y rounded-md border border-[rgb(var(--border))] bg-code-bg p-3 font-mono text-xs leading-relaxed text-fg outline-none transition placeholder:text-muted focus:border-ring focus:ring-2 focus:ring-ring/30"
-              />
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--border))] bg-surface-2 px-3 py-2 text-sm text-fg transition hover:bg-surface-3">
-                  Upload file
-                  <input
-                    type="file"
-                    accept=".graphql,.gql,.json,.yaml,.yml,.proto,.txt"
-                    onChange={onFile}
-                    className="hidden"
-                  />
-                </label>
-                <span className="text-xs text-muted">or start from a template →</span>
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.label}
-                    onClick={() => applyTemplate(t)}
-                    className="rounded-md border border-[rgb(var(--border))] px-2.5 py-1 text-xs font-medium text-muted transition hover:border-border-strong hover:text-fg"
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </Card>
+      {error ? (
+        <Card className="border-danger/40">
+          <div className="flex items-center gap-2 text-sm text-danger">
+            <StatusDot tone="red" /> {error}
+          </div>
+        </Card>
+      ) : null}
 
-          <Card>
-            <SectionTitle hint="Describe the mock data you want. Tip: include a count, e.g. “Generate 5 …”.">
-              2. Describe
-            </SectionTitle>
-            <div className="flex flex-col gap-3">
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Generate 5 realistic products across categories with prices in USD."
-                className="h-24 w-full resize-y rounded-md border border-[rgb(var(--border))] bg-surface-2 p-3 text-sm leading-relaxed text-fg outline-none transition placeholder:text-muted focus:border-ring focus:ring-2 focus:ring-ring/30"
-              />
-              <Field label="Service name (optional)">
-                <Input
-                  value={serviceName}
-                  onChange={(e) => setServiceName(e.target.value)}
-                  placeholder="Auto-detected from schema"
+      {/* Step 1: Schema */}
+      {page === 0 ? (
+        <Card>
+          <SectionTitle hint="Paste a GraphQL SDL, OpenAPI/JSON, AsyncAPI, or Protobuf spec — or upload a file.">
+            1. Schema
+          </SectionTitle>
+          <div className="flex flex-col gap-3">
+            <textarea
+              value={schema}
+              onChange={(e) => {
+                setSchema(e.target.value);
+                setDetect(null);
+                setResult(null);
+              }}
+              spellCheck={false}
+              placeholder="Paste a schema here (GraphQL SDL, OpenAPI JSON, AsyncAPI, or Protobuf)"
+              autoFocus
+              className="h-80 w-full resize-y rounded-md border border-[rgb(var(--border))] bg-code-bg p-3 font-mono text-xs leading-relaxed text-fg outline-none transition placeholder:text-muted focus:border-ring focus:ring-2 focus:ring-ring/30"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--border))] bg-surface-2 px-3 py-2 text-sm text-fg transition hover:bg-surface-3">
+                Upload file
+                <input
+                  type="file"
+                  accept=".graphql,.gql,.json,.yaml,.yml,.proto,.txt"
+                  onChange={onFile}
+                  className="hidden"
                 />
-              </Field>
+              </label>
+              <span className="text-xs text-muted">or start from a template →</span>
+              {TEMPLATES.map((t) => (
+                <button
+                  key={t.label}
+                  onClick={() => applyTemplate(t)}
+                  className="rounded-md border border-[rgb(var(--border))] px-2.5 py-1 text-xs font-medium text-muted transition hover:border-border-strong hover:text-fg"
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
-          </Card>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={handleDetect} disabled={!schema.trim() || detecting}>
-              {detecting ? <Spinner /> : 'Preview'}
-            </Button>
-            <Button
-              onClick={handleDeploy}
-              disabled={!schema.trim() || !prompt.trim() || deploying}
-            >
-              {deploying ? <Spinner label="Generating & deploying…" /> : 'Generate & Deploy'}
-            </Button>
+          </div>
+          <div className="mt-5 flex items-center justify-end gap-3 border-t border-[rgb(var(--border))] pt-4">
             {(schema || prompt || result) && (
-              <Button variant="ghost" onClick={reset} disabled={deploying}>
+              <Button variant="ghost" onClick={reset}>
                 Reset
               </Button>
             )}
+            <Button onClick={() => setPage(1)} disabled={!schema.trim()}>
+              Next: Describe →
+            </Button>
           </div>
+        </Card>
+      ) : null}
 
-          {error ? (
-            <Card className="border-danger/40">
-              <div className="flex items-center gap-2 text-sm text-danger">
-                <StatusDot tone="red" /> {error}
-              </div>
-            </Card>
-          ) : null}
-        </div>
+      {/* Step 2: Describe */}
+      {page === 1 ? (
+        <Card>
+          <SectionTitle hint="Describe the mock data you want. Tip: include a count, e.g. “Generate 5 …”.">
+            2. Describe
+          </SectionTitle>
+          <div className="flex flex-col gap-3">
+            <textarea
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                setResult(null);
+              }}
+              autoFocus
+              placeholder="Generate 5 realistic products across categories with prices in USD."
+              className="h-32 w-full resize-y rounded-md border border-[rgb(var(--border))] bg-surface-2 p-3 text-sm leading-relaxed text-fg outline-none transition placeholder:text-muted focus:border-ring focus:ring-2 focus:ring-ring/30"
+            />
+            <Field label="Service name (optional)">
+              <Input
+                value={serviceName}
+                onChange={(e) => setServiceName(e.target.value)}
+                placeholder="Auto-detected from schema"
+              />
+            </Field>
+          </div>
+          <div className="mt-5 flex items-center justify-end gap-3 border-t border-[rgb(var(--border))] pt-4">
+            <Button variant="ghost" onClick={() => setPage(0)}>
+              ← Back
+            </Button>
+            <Button onClick={() => setPage(2)} disabled={!prompt.trim()}>
+              Next: Preview →
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
-        {/* Right: preview + result */}
-        <aside className="flex flex-col gap-6">
-          <Card ai>
-            <SectionTitle hint="Read-only inspection — no mocks are created yet.">Preview</SectionTitle>
+      {/* Step 3: Preview */}
+      {page === 2 ? (
+        <Card ai>
+          <SectionTitle hint="Read-only inspection — no mocks are created yet.">3. Preview</SectionTitle>
+          <div className="flex flex-col gap-4">
+            <div>
+              <Button variant="secondary" onClick={handleDetect} disabled={!schema.trim() || detecting}>
+                {detecting ? <Spinner label="Detecting…" /> : 'Run preview'}
+              </Button>
+            </div>
             {!detect ? (
               <p className="text-sm text-muted">
-                Run <span className="font-medium text-fg">Preview</span> to detect the schema format and
-                validate before deploying.
+                Run <span className="font-medium text-fg">preview</span> to detect the schema format and
+                validate before deploying, or skip straight to deploy.
               </p>
             ) : (
               <div className="flex flex-col gap-3 text-sm">
@@ -436,186 +486,210 @@ export default function AIStudioPage() {
                 ) : null}
               </div>
             )}
+          </div>
+          <div className="mt-5 flex items-center justify-end gap-3 border-t border-[rgb(var(--border))] pt-4">
+            <Button variant="ghost" onClick={() => setPage(1)}>
+              ← Back
+            </Button>
+            <Button onClick={handleDeploy} disabled={!schema.trim() || !prompt.trim() || deploying}>
+              {deploying ? <Spinner label="Generating & deploying…" /> : 'Generate & Deploy'}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {/* Step 4: Deploy result */}
+      {page === 3 && result ? (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <SectionTitle action={endpoint ? <Badge tone="green">Live</Badge> : undefined}>
+              4. Deployed
+            </SectionTitle>
+            <div className="flex flex-col gap-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted">Service</span>
+                <span className="font-mono text-fg">{result.serviceName}</span>
+              </div>
+              {result.displayName && result.displayName !== result.serviceName ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Display name</span>
+                  <span className="text-fg">{result.displayName}</span>
+                </div>
+              ) : null}
+              {result.operationCount != null ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Operations</span>
+                  <span className="font-mono text-fg">{result.operationCount}</span>
+                </div>
+              ) : null}
+              {endpoint ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-muted">Endpoint</span>
+                  <code className="break-all rounded bg-code-bg px-2 py-1 font-mono text-xs text-fg">
+                    {endpoint}
+                  </code>
+                </div>
+              ) : null}
+              <div className="mt-1 flex gap-2">
+                <Link href="/services">
+                  <Button variant="secondary">Open in API Explorer</Button>
+                </Link>
+              </div>
+            </div>
           </Card>
 
-          {result ? (
-            <Card>
-              <SectionTitle
-                action={endpoint ? <Badge tone="green">Live</Badge> : undefined}
-              >
-                Deployed
-              </SectionTitle>
-              <div className="flex flex-col gap-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">Service</span>
-                  <span className="font-mono text-fg">{result.displayName || result.serviceName}</span>
-                </div>
-                {result.operationCount != null ? (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">Operations</span>
-                    <span className="font-mono text-fg">{result.operationCount}</span>
-                  </div>
-                ) : null}
-                {endpoint ? (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-muted">Endpoint</span>
-                    <code className="break-all rounded bg-code-bg px-2 py-1 font-mono text-xs text-fg">
-                      {endpoint}
-                    </code>
-                  </div>
-                ) : null}
-                <div className="mt-1 flex gap-2">
-                  <Link href="/services">
-                    <Button variant="secondary">Open in API Explorer</Button>
-                  </Link>
-                </div>
+          <Card>
+            <SectionTitle hint="Pipeline steps from the generate & deploy run.">Deployment log</SectionTitle>
+            <StepLog steps={result.steps || []} />
+          </Card>
+
+          {result.mockRoutes && result.mockRoutes.length > 0 ? (
+            <Card className="p-0">
+              <div className="border-b border-[rgb(var(--border))] px-5 py-3">
+                <h2 className="text-lg font-semibold text-fg">Mock routes</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[rgb(var(--border))] text-left text-xs uppercase tracking-wide text-muted">
+                      <th className="px-5 py-2.5 font-medium">Operation</th>
+                      <th className="px-5 py-2.5 font-medium">Method</th>
+                      <th className="px-5 py-2.5 font-medium">URL</th>
+                      <th className="px-5 py-2.5 font-medium">Example</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.mockRoutes.map((r, i) => (
+                      <tr key={i} className="border-b border-[rgb(var(--border))] last:border-0">
+                        <td className="px-5 py-2.5 font-medium text-fg">{r.operation}</td>
+                        <td className="px-5 py-2.5">
+                          <Badge tone="blue">{r.method}</Badge>
+                        </td>
+                        <td className="px-5 py-2.5 font-mono text-xs text-muted">{r.url}</td>
+                        <td className="px-5 py-2.5">
+                          <StatusDot tone={r.exampleGenerated ? 'green' : 'yellow'} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </Card>
           ) : null}
-        </aside>
-      </div>
 
-      {/* Deploy log spans full width when present */}
-      {result ? (
-        <Card>
-          <SectionTitle hint="Pipeline steps from the generate & deploy run.">Deployment log</SectionTitle>
-          <StepLog steps={result.steps || []} />
-        </Card>
-      ) : null}
+          {/* Edge-case suggestions — analyze a deployed operation, then inject
+              the chosen edge cases as callable mock variants. */}
+          <Card ai>
+            <SectionTitle
+              hint="Inspects the schema and suggests realistic failure modes below — inject one and it's served on the live mock immediately."
+              action={<Badge tone="purple">AI</Badge>}
+            >
+              Suggested Edge Cases
+            </SectionTitle>
 
-      {result?.mockRoutes && result.mockRoutes.length > 0 ? (
-        <Card className="p-0">
-          <div className="border-b border-[rgb(var(--border))] px-5 py-3">
-            <h2 className="text-lg font-semibold text-fg">Mock routes</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[rgb(var(--border))] text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="px-5 py-2.5 font-medium">Operation</th>
-                  <th className="px-5 py-2.5 font-medium">Method</th>
-                  <th className="px-5 py-2.5 font-medium">URL</th>
-                  <th className="px-5 py-2.5 font-medium">Example</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.mockRoutes.map((r, i) => (
-                  <tr key={i} className="border-b border-[rgb(var(--border))] last:border-0">
-                    <td className="px-5 py-2.5 font-medium text-fg">{r.operation}</td>
-                    <td className="px-5 py-2.5">
-                      <Badge tone="blue">{r.method}</Badge>
-                    </td>
-                    <td className="px-5 py-2.5 font-mono text-xs text-muted">{r.url}</td>
-                    <td className="px-5 py-2.5">
-                      <StatusDot tone={r.exampleGenerated ? 'green' : 'yellow'} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : null}
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Operation">
+                <select
+                  value={edgeOp}
+                  onChange={(e) => {
+                    setEdgeOp(e.target.value);
+                    setSuggestions(null);
+                    setInjected({});
+                  }}
+                  className="min-w-56 rounded-md border border-[rgb(var(--border))] bg-surface-2 px-3 py-2 text-sm text-fg outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+                >
+                  {(result.mockRoutes || []).map((r) => (
+                    <option key={r.operation} value={r.operation}>
+                      {r.operation}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Button variant="secondary" onClick={analyzeEdgeCases} disabled={analyzing || !edgeOp}>
+                {analyzing ? <Spinner label="Analyzing…" /> : 'Suggest'}
+              </Button>
+            </div>
 
-      {/* Edge-case suggestions — analyze a deployed operation, then inject
-          the chosen edge cases as callable mock variants. */}
-      {result ? (
-        <Card ai>
-          <SectionTitle
-            hint="AI (or fallback) inspects the schema and suggests edge cases. Inject one and it's served on the live mock route immediately."
-            action={<Badge tone="purple">Edge cases</Badge>}
-          >
-            Suggested Edge Cases
-          </SectionTitle>
+            {suggestErr ? (
+              <div className="mt-3 flex items-center gap-2 text-sm text-danger">
+                <StatusDot tone="red" /> {suggestErr}
+              </div>
+            ) : null}
 
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Operation">
-              <select
-                value={edgeOp}
-                onChange={(e) => {
-                  setEdgeOp(e.target.value);
-                  setSuggestions(null);
-                  setInjected({});
-                }}
-                className="min-w-56 rounded-md border border-[rgb(var(--border))] bg-surface-2 px-3 py-2 text-sm text-fg outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-              >
-                {(result.mockRoutes || []).map((r) => (
-                  <option key={r.operation} value={r.operation}>
-                    {r.operation}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Button variant="secondary" onClick={analyzeEdgeCases} disabled={analyzing || !edgeOp}>
-              {analyzing ? <Spinner label="Analyzing…" /> : 'Suggest edge cases'}
+            {suggestions ? (
+              suggestions.length === 0 ? (
+                <p className="mt-4 text-sm text-muted">No suggestions returned.</p>
+              ) : (
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {suggestions.map((s) => {
+                    const state = injected[s.id];
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex flex-col gap-2 rounded-lg border border-[rgb(var(--border))] bg-surface-2 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-sm font-semibold text-fg">{s.name}</span>
+                          <span className="flex shrink-0 gap-1">
+                            <Badge tone={SEVERITY_TONE[s.severity] || 'default'}>{s.severity}</Badge>
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted">{s.category}</span>
+                        <p className="text-sm text-muted">{s.description}</p>
+                        <div className="mt-auto flex items-center justify-between pt-1">
+                          {state === 'ok' ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-success">
+                              <StatusDot tone="green" /> Injected — callable now
+                            </span>
+                          ) : state === 'fail' ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-danger">
+                              <StatusDot tone="red" /> Failed
+                            </span>
+                          ) : (
+                            <span />
+                          )}
+                          <Button
+                            variant={state === 'ok' ? 'ghost' : 'secondary'}
+                            onClick={() => injectEdgeCase(s)}
+                            disabled={injectingId === s.id}
+                          >
+                            {injectingId === s.id ? 'Injecting…' : state === 'ok' ? 'Re-inject' : 'Inject'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : (
+              <p className="mt-4 text-sm text-muted">
+                Pick a deployed operation and <span className="font-medium text-fg">Suggest</span> to see
+                schema-tailored failure modes you can inject.
+              </p>
+            )}
+
+            {endpoint && Object.values(injected).includes('ok') ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted">
+                  Injected edge cases are now served at{' '}
+                  <code className="rounded bg-code-bg px-1.5 py-0.5 font-mono text-fg">{endpoint}</code>.
+                </p>
+                <Button variant="secondary" onClick={restoreOriginal} disabled={restoring}>
+                  {restoring ? <Spinner label="Restoring…" /> : 'Restore original data'}
+                </Button>
+              </div>
+            ) : null}
+          </Card>
+
+          <div className="flex items-center justify-between border-t border-[rgb(var(--border))] pt-4">
+            <Button variant="ghost" onClick={() => setPage(2)}>
+              ← Back to Preview
+            </Button>
+            <Button variant="secondary" onClick={reset}>
+              Start over
             </Button>
           </div>
-
-          {suggestErr ? (
-            <div className="mt-3 flex items-center gap-2 text-sm text-danger">
-              <StatusDot tone="red" /> {suggestErr}
-            </div>
-          ) : null}
-
-          {suggestions ? (
-            suggestions.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No suggestions returned.</p>
-            ) : (
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                {suggestions.map((s) => {
-                  const state = injected[s.id];
-                  return (
-                    <div
-                      key={s.id}
-                      className="flex flex-col gap-2 rounded-lg border border-[rgb(var(--border))] bg-surface-2 p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm font-semibold text-fg">{s.name}</span>
-                        <span className="flex shrink-0 gap-1">
-                          <Badge tone={SEVERITY_TONE[s.severity] || 'default'}>{s.severity}</Badge>
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted">{s.category}</span>
-                      <p className="text-sm text-muted">{s.description}</p>
-                      <div className="mt-auto flex items-center justify-between pt-1">
-                        {state === 'ok' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-success">
-                            <StatusDot tone="green" /> Injected — callable now
-                          </span>
-                        ) : state === 'fail' ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs text-danger">
-                            <StatusDot tone="red" /> Failed
-                          </span>
-                        ) : (
-                          <span />
-                        )}
-                        <Button
-                          variant={state === 'ok' ? 'ghost' : 'secondary'}
-                          onClick={() => injectEdgeCase(s)}
-                          disabled={injectingId === s.id}
-                        >
-                          {injectingId === s.id ? 'Injecting…' : state === 'ok' ? 'Re-inject' : 'Inject'}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )
-          ) : (
-            <p className="mt-4 text-sm text-muted">
-              Pick a deployed operation and <span className="font-medium text-fg">Suggest edge cases</span> to see
-              schema-tailored failure modes you can inject.
-            </p>
-          )}
-
-          {endpoint && Object.values(injected).includes('ok') ? (
-            <p className="mt-3 text-xs text-muted">
-              Injected edge cases are now served at <code className="rounded bg-code-bg px-1.5 py-0.5 font-mono text-fg">{endpoint}</code>.
-              Restore original data from the Chaos Lab.
-            </p>
-          ) : null}
-        </Card>
+        </div>
       ) : null}
     </div>
   );
