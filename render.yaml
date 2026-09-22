@@ -34,8 +34,15 @@ services:
     plan: free
     image:
       url: quay.io/microcks/microcks-uber:latest
-    # microcks-uber's HTTP server listens on 8080; Render auto-detects it from
-    # the image. The dashboard reaches it at <host>:8080 over the private net.
+    # microcks-uber exposes THREE ports: 8080 (HTTP UI/API), 9090 (gRPC), and an
+    # embedded MongoDB. Left to auto-detect, Render probed a non-HTTP port and
+    # the health checks landed on Mongo/gRPC ("message too large" / "Unexpected
+    # HTTP/1.x request"). Pin PORT=8080 so Render routes and health-checks the
+    # HTTP server, and point the check at Microcks' real health endpoint.
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "8080"
 
   # ─── Dashboard / Express API (public) ───────────────────────────────────
   - name: mockserver-dashboard

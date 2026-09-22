@@ -66,6 +66,11 @@ If you change `BACKEND_URL` later, redeploy the Vercel project for it to take ef
 - **Everything slow on first hit after a while** — free instances spin down after
   ~15 min idle. First request wakes them (can take 30–60s) and Microcks re-imports
   specs. Expected on free tier.
+- **Microcks logs show `message too large` (Mongo) or `Unexpected HTTP/1.x
+  request` (gRPC)** — Render was health-checking the wrong port. `microcks-uber`
+  exposes 8080 (HTTP), 9090 (gRPC) and an embedded MongoDB; `render.yaml` pins
+  `PORT=8080` and `healthCheckPath: /api/health` on the microcks service to fix
+  this. If you edited that service, make sure both are still set.
 - **Microcks OOM / dashboard shows "Microcks not reachable"** — `microcks-uber` is
   memory-heavy for the 512 MB free plan. Bump `mockserver-microcks` to
   `plan: starter` in `render.yaml` and re-apply. The dashboard still serves
