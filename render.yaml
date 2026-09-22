@@ -1,0 +1,60 @@
+# Render Blueprint — free demo deployment.
+#
+# Deploys two of the four compose services onto Render:
+#   - microcks  : the mock engine, as a PRIVATE service (not publicly exposed).
+#   - dashboard : the Express API + dashboard, as a PUBLIC web service. The
+#                 Next.js frontend lives on Vercel and calls this over HTTPS
+#                 via its BACKEND_URL env var (see deployment/RENDER-VERCEL.md).
+#
+# The compose `import` step is replaced by `preDeployCommand` on the dashboard,
+# which runs import-to-microcks.sh against the private Microcks before the new
+# version goes live.
+#
+# NOTES / free-tier caveats:
+#   - Free instances spin down after ~15 min idle; first request after that is
+#     a slow cold start and Microcks re-imports its specs on wake.
+#   - microcks-uber is memory-heavy and may be unstable on the 512MB free plan.
+#     If it OOMs, bump the microcks service to `plan: starter`. The dashboard
+#     falls back to @graphql-tools/mock when Microcks is unreachable.
+#   - `type: pserv` (private services) may require a paid plan on some accounts.
+#     If unavailable, change microcks to `type: web` and set the dashboard's
+#     MICROCKS_URL to the microcks public .onrender.com URL instead.
+
+services:
+  # ─── Mock engine (private) ──────────────────────────────────────────────
+  - name: mockserver-microcks
+    type: pserv
+    runtime: image
+    plan: free
+    image:
+      url: quay.io/microcks/microcks-uber:latest
+    # microcks-uber listens on 8080 internally; Render detects it from the
+    # container. Reached only by the dashboard over the private network.
+
+  # ─── Dashboard / Express API (public) ───────────────────────────────────
+  - name: mockserver-dashboard
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Load the baked-in artifact specs into Microcks before going live.
+    preDeployCommand: "bash ./import-to-microcks.sh"
+    envVars:
+      - key: PORT
+        value: "4010"
+      # Internal address of the private Microcks service (host:port).
+      - key: MICROCKS_URL
+        fromService:
+          name: mockserver-microcks
+          type: pserv
+          property: hostport
+      - key: ARTIFACTS_DIR
+        value: /app/artifacts
+      # Ephemeral on free tier — resets on redeploy. Acceptable for a demo.
+      - key: STATE_FILE_PATH
+        value: /app/artifacts/state.json
+      # AI features run in fallback mode unless AI_API_KEY / AI_BASE_URL are set.
+      - key: AI_PROVIDER
+        value: local

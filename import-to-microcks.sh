@@ -3,6 +3,12 @@
 set -e
 
 MICROCKS_URL="${MICROCKS_URL:-http://localhost:8585}"
+# Render's `fromService` hostport injects a bare host:port with no scheme.
+# Prepend http:// so the curl URLs below are valid.
+case "$MICROCKS_URL" in
+  http://*|https://*) ;;
+  *) MICROCKS_URL="http://$MICROCKS_URL" ;;
+esac
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-/app/artifacts}"
 
 echo "Waiting for Microcks at $MICROCKS_URL..."

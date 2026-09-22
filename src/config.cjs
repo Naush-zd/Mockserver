@@ -3,7 +3,10 @@ const path = require('path');
 const PORT = process.env.PORT || 4010;
 // Microcks is always a LOCAL instance you run yourself (docker-compose `microcks`
 // service or a standalone container). No hosted/managed Microcks is used.
-const MICROCKS_URL = process.env.MICROCKS_URL || 'http://localhost:8585';
+// Normalize: some platforms (e.g. Render's `fromService` hostport) inject a
+// bare `host:port` with no scheme. Prepend http:// so URL concatenation works.
+const _rawMicrocksUrl = process.env.MICROCKS_URL || 'http://localhost:8585';
+const MICROCKS_URL = /^https?:\/\//.test(_rawMicrocksUrl) ? _rawMicrocksUrl : `http://${_rawMicrocksUrl}`;
 
 // Directory where API spec/example artifacts live. Read at boot by
 // schema-loader and at runtime by the AI flows. In production (EC2) this
