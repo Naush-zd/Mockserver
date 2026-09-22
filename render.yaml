@@ -6,9 +6,10 @@
 #                 Next.js frontend lives on Vercel and calls this over HTTPS
 #                 via its BACKEND_URL env var (see deployment/RENDER-VERCEL.md).
 #
-# The compose `import` step is replaced by `preDeployCommand` on the dashboard,
-# which runs import-to-microcks.sh against the private Microcks before the new
-# version goes live.
+# The compose `import` step runs at container boot instead: entrypoint.sh
+# kicks off import-to-microcks.sh in the background (pre-deploy commands aren't
+# allowed on Render's free tier). The script polls Microcks until ready, then
+# uploads the baked-in specs.
 #
 # NOTES / free-tier caveats:
 #   - Free instances spin down after ~15 min idle; first request after that is
@@ -39,8 +40,8 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    # Load the baked-in artifact specs into Microcks before going live.
-    preDeployCommand: "bash ./import-to-microcks.sh"
+    # NOTE: no preDeployCommand — not supported on free tier. The dashboard's
+    # entrypoint.sh imports the baked-in specs into Microcks at boot instead.
     envVars:
       - key: PORT
         value: "4010"

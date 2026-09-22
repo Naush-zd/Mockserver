@@ -38,10 +38,12 @@ curl https://mockserver-dashboard.onrender.com/health          # → 200
 curl https://mockserver-dashboard.onrender.com/rest/... # a mock endpoint
 ```
 
-In the dashboard service **Logs**, look for `Microcks: N services (...)` on boot —
-that confirms the `preDeployCommand` imported the baked-in specs. If you instead see
-`⚠ Microcks not reachable`, the Microcks service is still starting or OOMed (see
-Troubleshooting).
+In the dashboard service **Logs**, look for the background importer's output
+(`Microcks is ready` → `✓ <spec>` lines → `Done. N services loaded`). The importer
+runs at container boot (free tier disallows pre-deploy commands), polls Microcks
+until it's up, then uploads the baked-in specs. If you see `⚠ Microcks not
+reachable`, the Microcks service is still starting or OOMed (see Troubleshooting) —
+the importer will keep retrying for up to 3 minutes.
 
 ## Part 2 — Vercel (frontend)
 

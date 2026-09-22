@@ -40,4 +40,16 @@ if [ -n "$SECRETS_JSON" ]; then
   eval "$(echo "$SECRETS_JSON" | jq -r 'keys[] as $k | "export \($k)=\(.[$k] | @sh)"')"
 fi
 
+# Import baked-in artifact specs into Microcks. On platforms with a separate
+# import job/pre-deploy step (docker-compose `import` service, ECS task) this
+# is a no-op waste but harmless. On Render free tier — where pre-deploy commands
+# aren't allowed — this is how specs get loaded. Run it in the BACKGROUND so it
+# doesn't block the server from listening (and passing its health check); the
+# script polls Microcks until ready, then uploads. RUN_IMPORT_ON_BOOT=false
+# disables it for environments that import out-of-band.
+if [ "${RUN_IMPORT_ON_BOOT:-true}" = "true" ] && [ -f "./import-to-microcks.sh" ]; then
+  echo "[entrypoint] Will import artifacts into Microcks in the background"
+  bash ./import-to-microcks.sh &
+fi
+
 exec "$@"
