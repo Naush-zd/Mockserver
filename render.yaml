@@ -17,20 +17,25 @@
 #   - microcks-uber is memory-heavy and may be unstable on the 512MB free plan.
 #     If it OOMs, bump the microcks service to `plan: starter`. The dashboard
 #     falls back to @graphql-tools/mock when Microcks is unreachable.
-#   - `type: pserv` (private services) may require a paid plan on some accounts.
-#     If unavailable, change microcks to `type: web` and set the dashboard's
-#     MICROCKS_URL to the microcks public .onrender.com URL instead.
+#   - Private services (`type: pserv`) are not available on the free plan, so
+#     Microcks runs as a `type: web` service here. It gets a public
+#     .onrender.com URL, but the dashboard still reaches it over Render's
+#     internal private network via `fromService` hostport — the public URL is
+#     just an unused side effect. If you'd rather not expose the raw engine,
+#     upgrade the account and switch it back to `type: pserv`.
 
 services:
-  # ─── Mock engine (private) ──────────────────────────────────────────────
+  # ─── Mock engine ────────────────────────────────────────────────────────
+  # Runs as a public web service (free tier has no private services), but the
+  # dashboard talks to it over the internal network — see MICROCKS_URL below.
   - name: mockserver-microcks
-    type: pserv
+    type: web
     runtime: image
     plan: free
     image:
       url: quay.io/microcks/microcks-uber:latest
-    # microcks-uber listens on 8080 internally; Render detects it from the
-    # container. Reached only by the dashboard over the private network.
+    # microcks-uber's HTTP server listens on 8080; Render auto-detects it from
+    # the image. The dashboard reaches it at <host>:8080 over the private net.
 
   # ─── Dashboard / Express API (public) ───────────────────────────────────
   - name: mockserver-dashboard
@@ -45,11 +50,12 @@ services:
     envVars:
       - key: PORT
         value: "4010"
-      # Internal address of the private Microcks service (host:port).
+      # Internal (private-network) address of the Microcks service, host:port.
+      # config.cjs / import-to-microcks.sh prepend http:// to this bare value.
       - key: MICROCKS_URL
         fromService:
           name: mockserver-microcks
-          type: pserv
+          type: web
           property: hostport
       - key: ARTIFACTS_DIR
         value: /app/artifacts

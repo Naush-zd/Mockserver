@@ -10,23 +10,25 @@ cold-start after idle. For a durable/shared deployment see
 ```
 Vercel (web / Next.js)  ──HTTPS──▶  Render: mockserver-dashboard (Express, public)
    env: BACKEND_URL                        │
-                                           └─▶ Render: mockserver-microcks (private)
+                                           └─▶ Render: mockserver-microcks (web, engine)
 ```
 
 - The browser only ever calls the Vercel app at same-origin `/backend/*`. Vercel's
   route handler (`web/src/app/backend/[[...path]]/route.ts`) proxies that to the
   Render dashboard server-side using `BACKEND_URL` — so there's **no CORS** and the
   backend URL is configurable at runtime.
-- The dashboard reaches Microcks over Render's private network via `MICROCKS_URL`,
-  wired automatically by `render.yaml` (`fromService` → `hostport`).
+- The dashboard reaches Microcks over Render's internal private network via
+  `MICROCKS_URL`, wired automatically by `render.yaml` (`fromService` → `hostport`).
+  Microcks runs as a `web` service (free tier has no private services) so it also
+  gets a public URL, but nothing needs to call that directly.
 
 ## Part 1 — Render (backend)
 
 1. Push this repo (including `render.yaml`) to GitHub.
 2. In the Render dashboard: **New → Blueprint**, pick this repo. Render reads
    `render.yaml` and proposes two services:
-   - `mockserver-microcks` — private service, the mock engine.
-   - `mockserver-dashboard` — public web service, the Express API + dashboard.
+   - `mockserver-microcks` — web service, the mock engine.
+   - `mockserver-dashboard` — web service, the Express API + dashboard.
 3. Click **Apply**. Wait for both to reach **Live**. First build pulls the
    `microcks-uber` image and builds the dashboard `Dockerfile`.
 4. Copy the dashboard's public URL, e.g. `https://mockserver-dashboard.onrender.com`.
@@ -68,11 +70,11 @@ If you change `BACKEND_URL` later, redeploy the Vercel project for it to take ef
   memory-heavy for the 512 MB free plan. Bump `mockserver-microcks` to
   `plan: starter` in `render.yaml` and re-apply. The dashboard still serves
   `@graphql-tools/mock` fallback responses while Microcks is down.
-- **`pserv` rejected / private services not on your plan** — change
-  `mockserver-microcks` to `type: web` in `render.yaml`, redeploy, then set the
-  dashboard's `MICROCKS_URL` to the Microcks **public** `.onrender.com` URL (remove
-  the `fromService` block and use a literal `value`). This works but exposes the raw
-  engine publicly.
+- **Don't want Microcks publicly reachable** — the free tier has no private
+  services, so it's deployed as `type: web`. On a paid plan you can switch
+  `mockserver-microcks` to `type: pserv` in `render.yaml` (and update the
+  `fromService` `type` under `MICROCKS_URL` to `pserv`) to take it off the public
+  internet. The internal wiring is otherwise unchanged.
 - **AI Studio features do nothing** — expected. They run in fallback mode until you
   set `AI_API_KEY` (and `AI_BASE_URL` if using a custom endpoint) on the
   `mockserver-dashboard` service. The old compose pointed at a host-local proxy that
