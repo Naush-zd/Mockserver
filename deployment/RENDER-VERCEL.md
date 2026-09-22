@@ -66,11 +66,19 @@ If you change `BACKEND_URL` later, redeploy the Vercel project for it to take ef
 - **Everything slow on first hit after a while** — free instances spin down after
   ~15 min idle. First request wakes them (can take 30–60s) and Microcks re-imports
   specs. Expected on free tier.
-- **Microcks logs show `message too large` (Mongo) or `Unexpected HTTP/1.x
-  request` (gRPC)** — Render was health-checking the wrong port. `microcks-uber`
-  exposes 8080 (HTTP), 9090 (gRPC) and an embedded MongoDB; `render.yaml` pins
-  `PORT=8080` and `healthCheckPath: /api/health` on the microcks service to fix
-  this. If you edited that service, make sure both are still set.
+- **Microcks deploy fails with `No open ports detected` / `Port scan timeout`,
+  plus Mongo `message too large` noise** — Render's scanner only looks for one
+  HTTP listener on `0.0.0.0:$PORT` (default 10000), but `microcks-uber` defaults
+  to 8080 and also runs gRPC (9090) + an embedded MongoDB, which the scanner trips
+  over. `render.yaml` fixes this by setting `SERVER_PORT=10000` (Spring Boot honors
+  it) so Microcks listens on the same port Render scans. If you edited the microcks
+  service, keep `SERVER_PORT` and `PORT` both `10000` and `healthCheckPath:
+  /api/health`.
+- **Dashboard logs `getaddrinfo ENOTFOUND mockserver-microcks` at startup** —
+  harmless if it stops once Microcks is Live. It means the dashboard booted before
+  Microcks existed; the startup banner gives up, but `fetchMicrocksServices()` runs
+  fresh on every request, so the app recovers automatically once Microcks resolves.
+  If it *never* stops, Microcks failed to deploy — fix that service first.
 - **Microcks OOM / dashboard shows "Microcks not reachable"** — `microcks-uber` is
   memory-heavy for the 512 MB free plan. Bump `mockserver-microcks` to
   `plan: starter` in `render.yaml` and re-apply. The dashboard still serves
